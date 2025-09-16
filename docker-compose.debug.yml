@@ -1,0 +1,86 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:15
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - "postgres-data:/var/lib/postgresql/data/"
+
+  django:
+    build: .
+    image: django-docker
+    env_file: .env
+    environment:
+      - "DJANGO_DEBUG=true"
+    restart: unless-stopped
+    command: ["/docker-cmd.sh", "--debug"]
+    volumes:
+      - "media-data:/var/www/media"
+      - "./website:/usr/src/website"  # mount the source code for watching changes
+    depends_on:
+      - postgres
+      - redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.development.rule=Host(`127.0.0.1`) || Host(`localhost`)"
+      - "traefik.http.routers.development.entrypoints=web"
+
+  reverse-proxy:
+    image: traefik:v2.9
+    env_file: .env
+    restart: unless-stopped
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le-resolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.le-resolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le-resolver.acme.email=admin@yourdomain.com"
+      - "--certificatesresolvers.le-resolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      #- "8080:8080"
+    volumes:
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  celery:
+    build: .
+    image: celery-docker
+    restart: unless-stopped
+    env_file: .env
+    command: su-exec "$USER" celery -A website worker -l INFO
+    depends_on:
+      - redis
+
+  flower:
+    build: .
+    image: flower-docker
+    container_name: celery-flower-container
+    command: su-exec "$USER" celery -A website flower --basic_auth=${CELERY_FLOWER_USERNAME}:${CELERY_FLOWER_PASSWORD}
+    env_file:
+      - ./.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.rule=Host(`flower.localhost`)"
+      - "traefik.http.routers.flower.entrypoints=web"
+      - "traefik.http.services.flower.loadbalancer.server.port=5555"
+    depends_on:
+      - redis
+
+volumes:
+  postgres-data:
+  media-data:
+  redis-data:
+  flower-data:
