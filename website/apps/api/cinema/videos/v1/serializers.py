@@ -27,15 +27,14 @@ class VideoSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     original_language_id = serializers.SlugRelatedField(
+        source="original_language",
         slug_field="code",
         queryset=Language.objects.all(),
         allow_null=True,
         required=False,
         write_only=True,
     )
-    original_language = LanguageSerializer(
-        read_only=True,
-    )
+    original_language = LanguageSerializer(read_only=True)
     file = VideoLazyFileSerializer(read_only=True)
 
     class Meta:
