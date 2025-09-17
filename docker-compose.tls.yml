@@ -17,3 +17,7 @@ services:
     labels:
       - "traefik.http.routers.staticfiles.entrypoints=websecure"
       - "traefik.http.routers.staticfiles.tls.certresolver=le-resolver"
+
+  flower:
+    labels:
+      - "traefik.http.routers.flower.entrypoints=websecure"

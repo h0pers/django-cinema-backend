@@ -70,7 +70,39 @@ services:
       - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  celery:
+    build: .
+    image: celery-docker
+    restart: unless-stopped
+    env_file: .env
+    command: su-exec "$USER" celery -A website worker -l INFO
+    depends_on:
+      - redis
+
+  flower:
+    build: .
+    image: flower-docker
+    container_name: celery-flower-container
+    command: su-exec "$USER" celery -A website flower --basic_auth=${CELERY_FLOWER_USERNAME}:${CELERY_FLOWER_PASSWORD}
+    env_file:
+      - ./.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.rule=Host(`flower.localhost`)"
+      - "traefik.http.routers.flower.entrypoints=web"
+      - "traefik.http.services.flower.loadbalancer.server.port=5555"
+    depends_on:
+      - redis
+
 volumes:
   postgres-data:
   staticfiles-data:
   media-data:
+  redis-data:
+  flower-data:
